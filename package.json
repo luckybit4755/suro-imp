@@ -1,0 +1,39 @@
+{
+    "name": "suro-imp",
+    "version": "1.0.0",
+    "type": "module",
+    "description": "surge-routine-implosion: wave function collapse von fun-fun",
+    "author": "VGvM",
+    "license": "ISC",
+    "main": "index.js",
+    "dependencies": {
+        "jest": "^28.1.0"
+    },
+    "keywords": [
+        "wave fun collapse",
+        "procgen",
+        "procedural",
+        "generative"
+    ],
+    "scripts": {
+        "test": "jest"
+    },
+    "devDependencies": {
+        "@babel/preset-env": "^7.17.10",
+        "babel-jest": "^28.1.0"
+    },
+    "jest": {
+        "transform": {
+            "^.+\\.[t|j]sx?$": "babel-jest"
+        }
+    },
+    "babel": {
+        "env": {
+            "test": {
+                "presets": [
+                    "@babel/preset-env"
+                ]
+            }
+        }
+    }
+}
