@@ -5,13 +5,13 @@ test( 'basic-tile', () => {
 	const t1 = new Tile(0,0, count);
 	
 	//console.log( t1.toString() );
-	expect( t1.toString() ).toEqual( '(0,0>01234)' );
+	expect( t1.toString() ).toEqual( '(0,0#5>01234<_)' );
 	expect( t1.count ).toEqual( count );
 	expect( t1.value ).toBeNull();
 	expect( t1.count ).toEqual( t1.possibilities.size )
 
 	t1.restrict( new Set([2,3]) );
-	expect( t1.toString() ).toEqual( '(0,0>__23_)' );
+	expect( t1.toString() ).toEqual( '(0,0#2>__23_<_)' );
 	//console.log( t1.toString() );
 	expect( t1.count ).toEqual( 2 );
 	expect( t1.count ).toEqual( t1.possibilities.size )
@@ -19,14 +19,14 @@ test( 'basic-tile', () => {
 
 	t1.collapse( 2 )
 	//console.log( t1.toString() );
-	expect( t1.toString() ).toEqual( '(0,0>__2__)' );
+	expect( t1.toString() ).toEqual( '(0,0#1>__2__<2)' );
 	expect( t1.count ).toEqual( 1 );
 	expect( t1.count ).toEqual( t1.possibilities.size )
 	expect( t1.value ).toEqual( 2 );
 
 	t1.set( new Set([1,4]) );
 	//console.log( t1.toString() );
-	expect( t1.toString() ).toEqual( '(0,0>_1__4)' );
+	expect( t1.toString() ).toEqual( '(0,0#2>_1__4<_)' );
 	expect( t1.count ).toEqual( 2 );
 	expect( t1.count ).toEqual( t1.possibilities.size );
 	expect( t1.value ).toBeNull();
@@ -34,7 +34,7 @@ test( 'basic-tile', () => {
 	const t2 = new Tile(0,1, count);
 	//console.log( t2.toString() );
 	t2.restrict( new Set([0,3]) );
-	expect( t2.toString() ).toEqual( '(0,1>0__3_)' );
+	expect( t2.toString() ).toEqual( '(0,1#2>0__3_<_)' );
 	expect( t2.count ).toEqual( 2 );
 	expect( t2.count ).toEqual( t2.possibilities.size );
 
@@ -55,12 +55,12 @@ test( 'basic-tile', () => {
 
 	// verify there is no change
 
-	expect( t1.toString() ).toEqual( '(0,0>_1__4)' );
+	expect( t1.toString() ).toEqual( '(0,0#2>_1__4<_)' );
 	expect( t1.count ).toEqual( 2 );
 	expect( t1.count ).toEqual( t1.possibilities.size );
 	expect( t1.value ).toBeNull();
 
-	expect( t2.toString() ).toEqual( '(0,1>0__3_)' );
+	expect( t2.toString() ).toEqual( '(0,1#2>0__3_<_)' );
 	expect( t2.count ).toEqual( 2 );
 	expect( t2.count ).toEqual( t2.possibilities.size );
 });

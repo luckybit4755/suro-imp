@@ -228,13 +228,7 @@ export class Smasher {
 	
 	/////////////////////////////////////////////////////////////////////////////
 
-	static printTiles( tiles, tmi = true ) {
-		if ( tmi ) {
-			console.log( tiles.map( row=>row.map( t=>t.toString() ).join( '' ) ).join( '\n' ) );
-		} else {
-			console.log( tiles.map( row=>row.map( t=>t.value ).join( '' ) ).join( '\n' ) );
-		}
+	static printTiles( tiles, cb = (t)=>t.toString() ) {
+		console.log( tiles.map( row=>row.map( cb ).join( '' ) ).join( '\n' ) );
 	}
-	
-		
 }

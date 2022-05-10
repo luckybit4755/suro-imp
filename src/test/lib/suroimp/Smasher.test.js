@@ -1,7 +1,5 @@
 import { Smasher } from '../../../lib/suroimp/Smasher.js';
-
-const r = ( s ) => s.split( '' ).reverse();
-
+import { Ruler } from '../../../lib/suroimp/Ruler.js';
 
 test('ascii-topology-test',() => {
 	const count = 6;
@@ -17,33 +15,65 @@ test('ascii-topology-test',() => {
 		}
 	}
 
+	const smasher = new Smasher( rules );
+	const tiles = smasher.createMap( 40, 120 );
+
 	// https://people.sc.fsu.edu/~jburkardt/data/ascii_art_grayscale/ascii_art_grayscale.html
-	const gray = new Map()
-		.set(  5, '.,=/X#' )
-		.set(  8, ' .:-*#%@' )
-		.set( 11, '.,:;-=+*#%@' )
-		.set( 27, r( '###*********++++++++=========--------:::::::::....' ) ) // 6s at 20x60 ; 
-		.set( 35, r( '$B8W#ohbpwZ0LJYzvnrf/(1}]-+<il;,^`.' ) ) // 13s at 20x60
-		.set( 70, r( '$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft//\|()1{}[]?-_+~<>i!lI;:,"^`\'. ' ) ) // 84s at 20x60
-		
-
 	// http://paulbourke.net/dataformats/asciiart/
-	const bigPaul = r( '@@@@@@@@@@@@%%%%%%%%#########********+++++++++=========--------:::::::::,,,,,,,,..................' );
+	const paulbourke = r( '@@@@@@@@@@@@%%%%%%%%#########********+++++++++=========--------:::::::::,,,,,,,,..................' );
 
-	const tiles = new Smasher( rules ).createMap( 60, 180 );
+	Smasher.printTiles( tiles, t => {
+		const i = Math.floor( paulbourke.length * t.value / count );
+		return paulbourke[ i ] || '@'; // FIXME: weird offset error here
+	});
 
-	let min = count;
-	let max = 0;
-	tiles.forEach( row=>row.forEach( t => {
-		min = Math.min( min, t.value );
-		max = Math.max( max, t.value );
-	}));
-	const diff = Math.max( 1, max - min );
-
-	console.log( tiles.map( row=>row.map( t => {
-		//const i = Math.floor( bigPaul.length * ( t.value - min ) / diff );
-		const i = Math.floor( bigPaul.length * t.value / count );
-		return bigPaul[ i ] || '@'; // weird... 
-		return gray.get( count )[ t.value ] 
-	}).join( '' ) ).join( '|\n' ) );
+	verify( tiles, smasher );
 });
+
+test( 'corner-test', () => {
+	const charset = [
+		{ c:' ', n:0, s:0, e:0, w:0 },
+		{ c:'┌', n:0, s:1, e:1, w:0 },
+		{ c:'─', n:0, s:0, e:1, w:1 },
+		{ c:'┐', n:0, s:1, e:0, w:1 },
+		{ c:'┘', n:1, s:0, e:0, w:1 },
+		{ c:'└', n:1, s:0, e:1, w:0 },
+		{ c:'│', n:1, s:1, e:0, w:0 }
+	];
+
+	const rules = Ruler.fromDescription( charset );
+	const smasher = new Smasher( rules );
+	const tiles = smasher.createMap( 40, 120 );
+	Smasher.printTiles( tiles, t => charset[ t.value ].c );
+	verify( tiles, smasher );
+});
+
+const verify = ( tiles, smasher ) => {
+	tiles.forEach( (row,r)=> {
+		row.forEach( (tile,c)=> {
+			expect( tile.row ).toEqual( r );
+			expect( tile.col ).toEqual( c );
+			expect( tile.value ).toBeGreaterThanOrEqual( 0 );
+			expect( tile.value ).toBeLessThan( smasher.count );
+
+			expect( tile.count ).toEqual( 1 );
+			for ( const [direction] of Object.entries( Smasher.DIRECTIONS ) ) {
+				const neighbor = smasher.move( direction, tile, tiles );
+				if ( neighbor ) {
+					expect( neighbor.value ).toBeGreaterThanOrEqual( 0 );
+					expect( neighbor.count ).toEqual( 1 );
+					expect( neighbor.value ).toBeLessThan( smasher.count );
+
+					smasher.can( direction, tile.value, neighbor.value );
+					smasher.can( smasher.oppositeDirection( direction ), neighbor.value, tile.value );
+					// TODO: verify the row,col values are right...
+				} else {
+					// TODO: verify it'd be out of bounds...
+				}
+			}
+		});
+	});
+};
+
+const r = ( s ) => s.split( '' ).reverse();
+
