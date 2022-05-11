@@ -17,22 +17,29 @@ export class Tile {
 		this.possibilities = new Set( 
 			new Array( this.originalCount ).fill(0).map((v,i)=>i) 
 		);
-		this.updateCount();
+		return this.updateCount();
 	}
 
 	updateCount() {
 		this.count = this.possibilities.size;
 		if ( 1 == this.count ) {
 			// collapsed! how exciting!
-			for ( const [v] of this.possibilities.entries() ) this.value = v;
+			for ( const [v] of this.possibilities.entries() ) {
+				this.value = v;
+			}
 		} else {
 			this.value = null;
 		}
+		return this;
 	}
 
 	collapse( value ) {
 		this.possibilities = new Set( [value] );
-		this.updateCount();
+		return this.updateCount();
+	}
+
+	hasValue() {
+		return null != this.value;
 	}
 
 	restrict( allowed ) {
@@ -44,12 +51,12 @@ export class Tile {
 			}
 		}
 		this.possibilities = possibilities;
-		this.updateCount();
+		return this.updateCount();
 	}
 
 	set( possibilities ) {
 		this.reset();
-		this.restrict( possibilities );
+		return this.restrict( possibilities );
 	}
 
 	cross( that, cb ) {
@@ -58,10 +65,11 @@ export class Tile {
 				cb( v, w );
 			}
 		}
+		return this;
 	}
 
 	toString() {
-		return `(${this.key}#${this.count}>${this.possibilitiesToString()}<${null==this.value?'_':this.value})`;
+		return `(${this.key}#${this.count}>${this.possibilitiesToString()}<${this.hasValue()?this.value:'_'})`;
 	}
 
 	possibilitiesToString() {

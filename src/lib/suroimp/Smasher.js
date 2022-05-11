@@ -1,5 +1,8 @@
 import { Tile } from '../model/Tile.js';
 
+const logger = require('pino')()
+
+
 export class Smasher {
 	static DIRECTIONS = '>,NORTH,EAST,SOUTH,WEST'.split(',').map((v,i,a)=>i?a[0][v]=v:a[i]={})[0];
 
@@ -19,8 +22,10 @@ export class Smasher {
 	// definition should include 
 	// rules: new Map().set( 'NORTH', new Map().set( 0, new Set([0,3,4,5]) );
 	// for the DIRECTIONS NORTH and EAST key for each tile and set of allowed tiles
-	constructor( rules, debug ) {
+	constructor( rules, limit = 1024, debug ) {
+		this.logger = logger.child({ clash:this.constructor.name });
 		this.rules = rules;
+		this.limit = limit;
 		this.debug = debug;
 
 		for( const [direction,allowed] of rules.entries() ) {
@@ -29,30 +34,83 @@ export class Smasher {
 		}
 	}
 
-	createMap( r, c ) {
-		const tiles = this.createTiles( r, c, this.count );
-		const counts = new Map();
-	
-		tiles.forEach( row => row.forEach( cell => this.add( counts, cell ) ) );
+	createMap( r, c, tiles = null ) {
+		const preSeeded = ( null != tiles );
+		this.logger.info({ creatingMap:true, r, c, preSeeded });
+
+		if ( !preSeeded ) {
+			tiles = this.createTiles( r, c );
+		} 
+		
+		const counts = this.createCounts( tiles );
+
+		if ( preSeeded ) {
+			this.preSeed( tiles, counts );
+		}
 	
 		let broke = false;
 		for ( let i = 0 ; i < r * c * 99 ; i++ ) {
-			const pick = this.pickNext( counts );
-		   	if ( !pick ) {
+			if ( !this.iterate( tiles, counts ) ) {
 				broke = true;
 				break;
 			}
-	
-			const pickForTile = this.pickForTile( pick, tiles );
-
-			this.remove( counts, pick.count, pick );
-			pick.collapse( pickForTile );
-
-			this.percolateOut( pick, tiles, counts );
 		}
 		if ( !broke ) console.log( 'did not break...' );
 	
+		this.logger.info({ createdMap:true, r, c, preSeeded, broke });
 		return tiles;
+	}
+
+	createTiles( r, c, count = this.count ) {
+		this.logger.info({ creatingTiles:true, r, c, count });
+		const tiles = new Array( r )
+			.fill( 0 )
+			.map( (_,rr) => new Array( c )
+				.fill( 0 )
+				.map( 
+					(_,cc) => new Tile( rr, cc, count )
+				)
+			)
+		;
+		this.logger.info({ createdTiles:true, r, c, count });
+		return tiles;
+	}
+
+	createCounts( tiles ) {
+		const counts = new Map();
+		tiles.forEach( row => row.forEach( cell => this.add( counts, cell ) ) );
+		return counts;
+	}
+
+	// need to evaluate the tiles which have been collapsed
+	preSeed( tiles, counts ) {
+		this.logger.info({ preseeding:true });
+
+		let seeded = 0;
+
+		tiles.forEach( row => { row
+			.filter( cell => cell.hasValue() )
+			.forEach( cell => {
+				seeded++;
+				this.percolateOut( cell, tiles, counts );
+			})
+		});
+
+		this.logger.info({ preseeded:seeded });
+	}
+
+	iterate( tiles, counts ) {
+		const pick = this.pickNext( counts );
+		if ( !pick ) return pick;
+	
+		const pickForTile = this.pickForTile( pick, tiles );
+
+		this.remove( counts, pick.count, pick );
+		pick.collapse( pickForTile );
+
+		this.percolateOut( pick, tiles, counts );
+
+		return pick;
 	}
 	
 	pickNext( counts ) {
@@ -110,7 +168,9 @@ export class Smasher {
 			console.log( message );
 		}
 		if ( undefined === pick ) {
-			Smasher.printTiles( tiles );
+			if ( this.debug ) {
+				Smasher.printTiles( tiles );
+			}
 			throw new Error( `you done goofed: ${message}` );
 		}
 	
@@ -161,47 +221,63 @@ export class Smasher {
 		throw new Error( `what direction is ${direction}???` );
 	}
 	
-	percolateOut( tile, tiles, counts, depth = 0 ) {
-		if ( depth > 333 ) {
-			throw new Error( 'i give up' );
-		}
-		for ( const [direction] of Object.entries( Smasher.DIRECTIONS ) ) {
-			const neighbor = this.move( direction, tile, tiles );
-			if ( this.perker( tile, neighbor, direction, counts ) ) {
-				this.percolateOut( neighbor, tiles, counts, depth + 1 );
+	percolateOut( tile, tiles, counts ) {
+		const queue = [tile];
+		while ( queue.length ) {
+			const tile = queue.shift();
+			for ( const [direction] of Object.entries( Smasher.DIRECTIONS ) ) {
+				const neighbor = this.move( direction, tile, tiles );
+
+				if ( this.perker( tile, neighbor, direction, counts ) ) {
+					queue.push( neighbor );
+				}
 			}
 		}
 	}
 	
-	perker( tile, neighbor, direction, counts = null ) {
-		if ( !tile || !neighbor ) return false;
-	
-		const count = neighbor.count;
-		const opposite = this.oppositeDirection( direction );
-		const allowed = this.allowedTiles( opposite, neighbor, tile );
+	perker( tile, neighbor, direction, counts ) {
+		const t = tile ? tile.toString() : tile;
+		const n = neighbor ? neighbor.toString() : neighbor;
+		const info = { tile:t, neighbor:n, direction:direction };
 
+		this.logger.debug({ perking:'---', info });
+		this.logger.debug({ perking:'...', tile:tile, t:(tile?tile.toString():'wtf?') }); 
 
-		if ( allowed.size == count ) {
+		if ( !tile || !neighbor ) {
+			this.logger.debug({ notPerking:null, info });
 			return false;
 		}
 
-		neighbor.restrict( allowed );	
+		if ( neighbor.hasValue() ) {
+			this.logger.debug({ noPerking:neighbor.value, info });
+			return false;
+		}
+		const count = neighbor.count;
+		
+		const opposite = this.oppositeDirection( direction );
+		const allowed = this.allowedTiles( opposite, neighbor, tile );
+
+		if ( allowed.size == count ) {
+			this.logger.debug({ perkless:info, allowed, count });
+			return false;
+		}
+		this.logger.debug({ perkable:info, allowed, count });
+
+		neighbor.restrict( allowed );
 		this.remove( counts, count, neighbor );
+		
+		if ( 0 == neighbor.count ) {
+			const a = Array.from( allowed ).join(', ');
+			//for( const [p] of tile.possibilities.entries() ); 
+			const message = `${t} broke ${neighbor.toString()} (${direction}): allowed:${a} x ${n}`;
+			throw new Error( message );
+		}
+
 		this.add( counts, neighbor );
 	
+		this.logger.debug({ perked:neighbor.toString(), info });
+
 		return true;
-	}
-	
-	createTiles( r, c, count ) {
-		return new Array( r )
-			.fill( 0 )
-			.map( (_,rr) => new Array( c )
-				.fill( 0 )
-				.map( 
-					(_,cc) => new Tile( rr, cc, count )
-				)
-			)
-		;
 	}
 	
 	add( counts, cell ) {
@@ -216,6 +292,7 @@ export class Smasher {
 	}
 	
 	remove( counts, oldCount, cell ) {
+		if ( 1 == oldCount ) return;
 		if ( !counts.has( oldCount ) ) {
 			throw new Error( `there are no cells which had ${oldCount}` );
 		}
