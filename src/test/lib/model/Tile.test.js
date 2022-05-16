@@ -2,7 +2,7 @@ import { Tile } from '../../../lib/model/Tile.js';
 
 test( 'basic-tile', () => {
 	const count = 5;
-	const t1 = new Tile(0,0, count);
+	const t1 = new Tile([0,0], count);
 	
 	//console.log( t1.toString() );
 	expect( t1.toString() ).toEqual( '(0,0#5>01234<_)' );
@@ -31,7 +31,7 @@ test( 'basic-tile', () => {
 	expect( t1.count ).toEqual( t1.possibilities.size );
 	expect( t1.value ).toBeNull();
 
-	const t2 = new Tile(0,1, count);
+	const t2 = new Tile([0,1], count);
 	//console.log( t2.toString() );
 	t2.restrict( new Set([0,3]) );
 	expect( t2.toString() ).toEqual( '(0,1#2>0__3_<_)' );

@@ -1,7 +1,8 @@
 import { Tile } from '../model/Tile.js';
+import { Rules } from '../model/Rules.js';
 
-const logger = require('pino')()
-
+import { pino } from 'pino';
+import { sprintf } from 'sprintf-js';
 
 export class Smasher {
 	static DIRECTIONS = '>,NORTH,EAST,SOUTH,WEST'.split(',').map((v,i,a)=>i?a[0][v]=v:a[i]={})[0];
@@ -19,19 +20,14 @@ export class Smasher {
 		return rules;
 	}
 
-	// definition should include 
-	// rules: new Map().set( 'NORTH', new Map().set( 0, new Set([0,3,4,5]) );
-	// for the DIRECTIONS NORTH and EAST key for each tile and set of allowed tiles
 	constructor( rules, limit = 1024, debug ) {
-		this.logger = logger.child({ clash:this.constructor.name });
+		this.logger = pino().child({ clash:this.constructor.name });
+
 		this.rules = rules;
+		this.count = rules.count;
+
 		this.limit = limit;
 		this.debug = debug;
-
-		for( const [direction,allowed] of rules.entries() ) {
-			this[ direction ] = allowed; // idk if this is a good idea or a terrible idea
-			this.count = allowed.size;
-		}
 	}
 
 	createMap( r, c, tiles = null ) {
@@ -68,7 +64,7 @@ export class Smasher {
 			.map( (_,rr) => new Array( c )
 				.fill( 0 )
 				.map( 
-					(_,cc) => new Tile( rr, cc, count )
+					(_,cc) => new Tile( [rr, cc], count )
 				)
 			)
 		;
@@ -92,7 +88,7 @@ export class Smasher {
 			.filter( cell => cell.hasValue() )
 			.forEach( cell => {
 				seeded++;
-				this.percolateOut( cell, tiles, counts );
+				this.propagate( cell, tiles, counts );
 			})
 		});
 
@@ -102,13 +98,13 @@ export class Smasher {
 	iterate( tiles, counts ) {
 		const pick = this.pickNext( counts );
 		if ( !pick ) return pick;
-	
+
 		const pickForTile = this.pickForTile( pick, tiles );
 
 		this.remove( counts, pick.count, pick );
 		pick.collapse( pickForTile );
 
-		this.percolateOut( pick, tiles, counts );
+		this.propagate( pick, tiles, counts );
 
 		return pick;
 	}
@@ -117,66 +113,28 @@ export class Smasher {
 		if ( !counts.size ) return null; // all done!
 		const fewest = Array.from( counts.keys() ).sort( (a,b)=>b-a).pop();
 		const candidates = [...counts.get( fewest )];
-		const index = Math.floor( candidates.length * Math.random() );
+		const index = Math.floor( candidates.length * this.random() );
 		const pick = candidates[ index ];
 		return pick;
 	}
 	
-	move( direction, tile, tiles ) {
-		switch ( direction ) {
-			case Smasher.DIRECTIONS.NORTH: return this.get( tiles, tile.row - 1, tile.col );
-			case Smasher.DIRECTIONS.SOUTH: return this.get( tiles, tile.row + 1, tile.col );
-			case Smasher.DIRECTIONS.EAST:  return this.get( tiles, tile.row, tile.col + 1 );
-			case Smasher.DIRECTIONS.WEST:  return this.get( tiles, tile.row, tile.col - 1 );
-		}
-		throw new Error( `idk about ${direction}` );
+	move( dimension, reversed, tile, tiles ) {
+		const diff = [0,0];
+		diff[ dimension ] = reversed ? -1 : +1;
+
+		const r = tile.position[0]+diff[0];
+		const c = tile.position[1]+diff[1];
+		const neighbor = this.get( tiles, r, c );
+
+		return neighbor;
 	}
 	
-	// 0 = blank ; 1 = ┌ ; 2 =  ┐ ; 3 =  ┘ ; 4 = └
 	pickForTile( tile, tiles ) {
-		if ( this.debug ) {
-			console.log( `picking for ${at}` );
-		}
-	
-		let count = 0;
-		const counts = new Map();
-
-		for ( const [direction] of Object.entries( Smasher.DIRECTIONS ) ) {
-			const neighbor = this.move( direction, tile, tiles );
-			if ( !neighbor ) continue;
-			count++;
-	
-			const allowed = this.allowedTiles( direction, tile, neighbor );
-			Array.from( allowed ).forEach( t => 
-				counts.set( t, 1 + ( counts.has( t ) ? counts.get( t ) : 0 ) )
-			);
-		}
-	
-		//console.log( count, 'and', counts );
-		const possible = new Set();
-		for ( const [t,n] of counts ) {
-			if ( n == count ) possible.add( t );
-		}
-	
-		const ugg = Array.from( possible );
-		const index = Math.floor( ugg.length * Math.random() );
-		const pick = ugg[ index ];
-	
-		const message = `picked ${tile.toString()} vs (${ugg.join(', ' )}) -> ${pick} `;
-	
-		if ( this.debug ) {
-			console.log( message );
-		}
-		if ( undefined === pick ) {
-			if ( this.debug ) {
-				Smasher.printTiles( tiles );
-			}
-			throw new Error( `you done goofed: ${message}` );
-		}
-	
+		const p = tile.possibilities;
+		const pick = Array.from( p )[ Math.floor( this.random() * p.size ) ];
 		return pick;
 	}
-	
+
 	get( tiles, r, c ) {
 		return (
 			( r < 0 || r >= tiles.length || c < 0 || c >= tiles[ 0 ].length )
@@ -184,102 +142,39 @@ export class Smasher {
 			: tiles[ r ][ c ]
 		);
 	}
-	
-	
-	can( direction, a, b ) {
-		switch( direction ) {
-			case Smasher.DIRECTIONS.NORTH: return this.NORTH.get( a ).has( b );
-			case Smasher.DIRECTIONS.SOUTH: return this.can( Smasher.DIRECTIONS.NORTH, b, a );
-			case Smasher.DIRECTIONS.EAST: return this.EAST.get( a ).has( b );
-			case Smasher.DIRECTIONS.WEST: return this.can( Smasher.DIRECTIONS.EAST, b, a );
-		}
-	
-		throw new Error( `unknow direction, magellan: ${direction}` );
-	}
-	
-	// direction is from the tile to the neighbor...
-	allowedTiles( direction, tile, neighbor ) {
-		const allowed = new Set();
-		if ( !tile || !neighbor ) return allowed;
 
-		tile.cross( neighbor, (t,n) => {
-			if ( this.can( direction, t, n ) ) {
-				allowed.add( t );
-			}
-		});
-
-		return allowed;
-	}
-	
-	oppositeDirection( direction ) {
-		switch ( direction ) {
-			case Smasher.DIRECTIONS.NORTH: return Smasher.DIRECTIONS.SOUTH;
-			case Smasher.DIRECTIONS.SOUTH: return Smasher.DIRECTIONS.NORTH;
-			case Smasher.DIRECTIONS.EAST: return Smasher.DIRECTIONS.WEST;
-			case Smasher.DIRECTIONS.WEST: return Smasher.DIRECTIONS.EAST;
-		}
-		throw new Error( `what direction is ${direction}???` );
-	}
-	
-	percolateOut( tile, tiles, counts ) {
+	propagate( tile, tiles, counts ) {
 		const queue = [tile];
+		let count = 0;
+
 		while ( queue.length ) {
+			count++;
 			const tile = queue.shift();
-			for ( const [direction] of Object.entries( Smasher.DIRECTIONS ) ) {
-				const neighbor = this.move( direction, tile, tiles );
 
-				if ( this.perker( tile, neighbor, direction, counts ) ) {
-					queue.push( neighbor );
+
+			this.rules.everyDirection( (dimension,reversed) => {
+				const neighbor = this.move( dimension, reversed, tile, tiles );
+
+				if ( !neighbor ) {
+					return;
 				}
-			}
+
+				const oldCount = neighbor.count;
+				const allowed = this.rules.allowed( tile, dimension, reversed );
+
+				if ( neighbor.restrict( allowed ) ) {
+					queue.push( neighbor );
+					this.remove( counts, oldCount, neighbor );
+					this.add( counts, neighbor );
+				} else {
+					if ( oldCount !== neighbor.count ) throw new Error( `no way...` );
+				}
+			});
 		}
+
+		return count;
 	}
-	
-	perker( tile, neighbor, direction, counts ) {
-		const t = tile ? tile.toString() : tile;
-		const n = neighbor ? neighbor.toString() : neighbor;
-		const info = { tile:t, neighbor:n, direction:direction };
 
-		this.logger.debug({ perking:'---', info });
-		this.logger.debug({ perking:'...', tile:tile, t:(tile?tile.toString():'wtf?') }); 
-
-		if ( !tile || !neighbor ) {
-			this.logger.debug({ notPerking:null, info });
-			return false;
-		}
-
-		if ( neighbor.hasValue() ) {
-			this.logger.debug({ noPerking:neighbor.value, info });
-			return false;
-		}
-		const count = neighbor.count;
-		
-		const opposite = this.oppositeDirection( direction );
-		const allowed = this.allowedTiles( opposite, neighbor, tile );
-
-		if ( allowed.size == count ) {
-			this.logger.debug({ perkless:info, allowed, count });
-			return false;
-		}
-		this.logger.debug({ perkable:info, allowed, count });
-
-		neighbor.restrict( allowed );
-		this.remove( counts, count, neighbor );
-		
-		if ( 0 == neighbor.count ) {
-			const a = Array.from( allowed ).join(', ');
-			//for( const [p] of tile.possibilities.entries() ); 
-			const message = `${t} broke ${neighbor.toString()} (${direction}): allowed:${a} x ${n}`;
-			throw new Error( message );
-		}
-
-		this.add( counts, neighbor );
-	
-		this.logger.debug({ perked:neighbor.toString(), info });
-
-		return true;
-	}
-	
 	add( counts, cell ) {
 		if ( 1 == cell.count ) return;
 
@@ -301,6 +196,10 @@ export class Smasher {
 		if ( !cells.size ) {
 			counts.delete( oldCount );
 		}
+	}
+
+	random() {
+		return Math.random();
 	}
 	
 	/////////////////////////////////////////////////////////////////////////////

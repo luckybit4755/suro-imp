@@ -8,7 +8,8 @@
     "main": "index.js",
     "dependencies": {
         "jest": "^28.1.0",
-        "pino": "^7.11.0"
+        "pino": "^7.11.0",
+        "sprintf-js": "^1.1.2"
     },
     "keywords": [
         "wave fun collapse",

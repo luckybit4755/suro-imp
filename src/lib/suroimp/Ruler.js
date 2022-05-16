@@ -1,30 +1,69 @@
-import { Smasher } from './Smasher.js';
+import { Rules } from '../model/Rules.js';
 
 import { createHash } from 'crypto';
 
 export class Ruler {
+	static DIRECTIONS = '>ewsnud'.split('').map((v,i,a)=>i?a[0][v]=v:a[i]={})[0];
+
+    static blankRules( count = 0 ) {
+        const rules = new Map()
+            .set( Ruler.DIRECTIONS.NORTH, new Map() )
+            .set( Ruler.DIRECTIONS.EAST, new Map() )
+        ;
+        while ( count-- ) {
+            for( const [direction, map] of rules.entries() ) {
+                map.set( count, new Set() );
+            }
+        }
+        return rules;
+    }
+
 	/**
 	 *
-	 * description is an array of objects with a property for n,s,e,w
+	 * description is an array of objects with a property like n,s,e,w
 	 * which are expected to match using the === operator
 	 *
-	 * the result is a set of north / east rules that can be used
-	 * by Smasher
+	 * +-----+--------------+------+
+	 * | dim | directions   | keys |
+	 * +-----+--------------+------+
+	 * | 1d  | east, west   | e, w |
+	 * | 2d  | south, north | s, n |
+	 * | 3d  | up down      | u, d |
+	 * +-----+--------------+------+
+	 *
+	 * returns an array of rules per dimension
+	 * highest dimension first
 	 *
 	 */
 	static fromDescription( description ) {
-		const rules = Smasher.blankRules( description.length );
-		description.forEach( (c,i) => {
-			description.forEach( (k,j) => {
-				if ( c.e == k.w ) {
-					rules.get( Smasher.DIRECTIONS.EAST ).get( i ).add( j );
+		const count = description.length;
+		const directions = Object.keys( Ruler.DIRECTIONS );
+
+		// bit hacky...
+		const dimensions = directions.filter( 
+			direction => direction in description[ 0 ]
+		).length / 2;
+
+		if ( dimensions != Math.floor( dimensions ) ) {
+			throw new Error( 'fractal rules not currently supported' );
+		}
+
+		const rz = new Array( dimensions ).fill( 0 ).map( 
+			_=> new Array( count ).fill( 0 ).map( _ => new Set() )
+		);
+
+		description.forEach( (c,i) => description.forEach( (k,j) => {
+			for ( let dimension = 0 ; dimension < dimensions ; dimension++ ) {
+				// eg: e,w
+				const d1 = directions[ 2 * dimension + 0 ];
+				const d2 = directions[ 2 * dimension + 1 ];
+				// note: highest dimensions are first
+				if( c[ d1 ] === k[ d2 ] ) {
+					rz[ dimensions - dimension - 1 ][ i ].add( j );
 				}
-				if ( c.n == k.s ) {
-					rules.get( Smasher.DIRECTIONS.NORTH ).get( i ).add( j );
-				}
-			})
-		});
-		return rules;
+			}
+		}));
+		return new Rules( rz );
 	}
 
 	static fuzzer( v ) {

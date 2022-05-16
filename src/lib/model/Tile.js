@@ -5,11 +5,10 @@
  *
  */
 export class Tile {
-	constructor( row, col, count ) {
-		this.row = row;
-		this.col = col;
+	constructor( position, count ) {
+		this.position = position;
 		this.originalCount = count;
-		this.key = `${row},${col}`;
+		this.key = position.join( ',' );
 		this.reset();
 	}
 
@@ -22,6 +21,9 @@ export class Tile {
 
 	updateCount() {
 		this.count = this.possibilities.size;
+		if ( 0 == this.count ) {
+			throw new Error( 'tile imploded:' + this );
+		}
 		if ( 1 == this.count ) {
 			// collapsed! how exciting!
 			for ( const [v] of this.possibilities.entries() ) {
@@ -43,6 +45,8 @@ export class Tile {
 	}
 
 	restrict( allowed ) {
+		if ( this.originalCount == allowed.size ) return false;
+
 		const possibilities = new Set();
 		// update the possibilities
 		for( const [v] of this.possibilities.entries() ) {
@@ -50,8 +54,11 @@ export class Tile {
 				possibilities.add( v );
 			}
 		}
+
+		const changed = this.possibilities.size != possibilities.size;
 		this.possibilities = possibilities;
-		return this.updateCount();
+		this.updateCount();
+		return changed;
 	}
 
 	set( possibilities ) {
@@ -68,14 +75,25 @@ export class Tile {
 		return this;
 	}
 
-	toString() {
-		return `(${this.key}#${this.count}>${this.possibilitiesToString()}<${this.hasValue()?this.value:'_'})`;
+	couldBe( i ) {
+		return this.possibilities.has( i );
 	}
 
-	possibilitiesToString() {
+	toString( mapping = null ) {
+		const v = ( this.hasValue() 
+			? mapping ? mapping[ this.value ] : this.value 
+			: '_'
+		);
+		return `(${this.key}#${this.count}>${this.possibilitiesToString(mapping)}<${v})`;
+	}
+
+	possibilitiesToString( mapping = null ) {
 		return new Array( this.originalCount )
 			.fill( '_' )
-			.map( ( c, i ) => this.possibilities.has( i ) ? i : this.cForI( i ) )
+			.map( ( c, i ) => {
+				const s = mapping ? mapping[ i ] : i;
+				return this.couldBe( i ) ? s : this.cForI( i ) 
+			})
 			.join( this.originalCount < 11 ? '' : ',' );
 	}
 
@@ -84,6 +102,4 @@ export class Tile {
 			Math.floor( 1 + Math.log( Math.max( 1, i ) ) /Math.log( 10 ) )
 		).fill( c )
 	}
-
-
 };
