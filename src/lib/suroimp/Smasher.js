@@ -47,7 +47,6 @@ export class Smasher {
 	createTiles( shape, count = this.count ) {
 		this.logger.info({ creatingTiles:true, shape, count });
 
-		// FIXME: still just 2d for now....
 		const tiles = new Multidimensional( shape, (previous,position) => {
 			return new Tile( position, count );
 		});
@@ -162,9 +161,13 @@ export class Smasher {
 	/////////////////////////////////////////////////////////////////////////////
 
 	static printTiles( tiles, cb = (t)=>t.toString() ) {
+		const theD = tiles.shape.length;
+		if ( 2 != theD ) {
+			throw new Error( `can only print 2d for now, not ${theD}` );
+		}
+
 		const lines = [];
 
-		// FIXME: 2d for now 
 		for ( const [row,r] of tiles ) {
 			const line = [];
 			for ( const [tile,c] of row ) {
