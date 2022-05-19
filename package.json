@@ -5,7 +5,7 @@
     "description": "surge-routine-implosion: wave function collapse von fun-fun",
     "author": "VGvM",
     "license": "ISC",
-    "main": "index.js",
+    "main": "src/lib/index.js",
     "dependencies": {
         "jest": "^28.1.0",
         "pino": "^7.11.0",
@@ -21,6 +21,7 @@
         "test": "jest --coverage"
     },
     "devDependencies": {
+        "@babel/plugin-transform-runtime": "^7.17.12",
         "@babel/preset-env": "^7.17.10",
         "babel-jest": "^28.1.0",
         "canvas": "^2.9.1"
@@ -35,6 +36,9 @@
             "test": {
                 "presets": [
                     "@babel/preset-env"
+                ],
+                "plugins": [
+                    "@babel/transform-runtime"
                 ]
             }
         }
