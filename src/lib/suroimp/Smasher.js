@@ -1,25 +1,11 @@
 import { Tile } from '../model/Tile.js';
 import { Rules } from '../model/Rules.js';
+import { Multidimensional } from '../model/Multidimensional.js';
 
 import { pino } from 'pino';
 import { sprintf } from 'sprintf-js';
 
 export class Smasher {
-	static DIRECTIONS = '>,NORTH,EAST,SOUTH,WEST'.split(',').map((v,i,a)=>i?a[0][v]=v:a[i]={})[0];
-
-	static blankRules( count = 0 ) {
-		const rules = new Map()
-			.set( Smasher.DIRECTIONS.NORTH, new Map() )
-			.set( Smasher.DIRECTIONS.EAST, new Map() ) 
-		;
-		while ( count-- ) {
-			for( const [direction, map] of rules.entries() ) {
-				map.set( count, new Set() );
-			}
-		}
-		return rules;
-	}
-
 	constructor( rules, limit = 1024, debug ) {
 		this.logger = pino().child({ clash:this.constructor.name });
 
@@ -30,12 +16,12 @@ export class Smasher {
 		this.debug = debug;
 	}
 
-	createMap( r, c, tiles = null ) {
+	createMap( shape, tiles = null ) {
 		const preSeeded = ( null != tiles );
-		this.logger.info({ creatingMap:true, r, c, preSeeded });
+		this.logger.info({ creatingMap:true, shape, preSeeded });
 
 		if ( !preSeeded ) {
-			tiles = this.createTiles( r, c );
+			tiles = this.createTiles( shape );
 		} 
 		
 		const counts = this.createCounts( tiles );
@@ -43,9 +29,10 @@ export class Smasher {
 		if ( preSeeded ) {
 			this.preSeed( tiles, counts );
 		}
-	
+
+		const max = shape.reduce( (a,b)=>a*b, 33 );
 		let broke = false;
-		for ( let i = 0 ; i < r * c * 99 ; i++ ) {
+		for ( let i = 0 ; i < max ; i++ ) {
 			if ( !this.iterate( tiles, counts ) ) {
 				broke = true;
 				break;
@@ -53,28 +40,27 @@ export class Smasher {
 		}
 		if ( !broke ) console.log( 'did not break...' );
 	
-		this.logger.info({ createdMap:true, r, c, preSeeded, broke });
+		this.logger.info({ createdMap:true, shape, preSeeded, broke });
 		return tiles;
 	}
 
-	createTiles( r, c, count = this.count ) {
-		this.logger.info({ creatingTiles:true, r, c, count });
-		const tiles = new Array( r )
-			.fill( 0 )
-			.map( (_,rr) => new Array( c )
-				.fill( 0 )
-				.map( 
-					(_,cc) => new Tile( [rr, cc], count )
-				)
-			)
-		;
-		this.logger.info({ createdTiles:true, r, c, count });
+	createTiles( shape, count = this.count ) {
+		this.logger.info({ creatingTiles:true, shape, count });
+
+		// FIXME: still just 2d for now....
+		const tiles = new Multidimensional( shape, (previous,position) => {
+			return new Tile( position, count );
+		});
+
+		this.logger.info({ createdTiles:true, shape, count });
 		return tiles;
 	}
 
 	createCounts( tiles ) {
 		const counts = new Map();
-		tiles.forEach( row => row.forEach( cell => this.add( counts, cell ) ) );
+		for ( const [tile,position,absPos] of tiles.all() ) {
+			this.add( counts, tile );
+		}
 		return counts;
 	}
 
@@ -84,13 +70,10 @@ export class Smasher {
 
 		let seeded = 0;
 
-		tiles.forEach( row => { row
-			.filter( cell => cell.hasValue() )
-			.forEach( cell => {
-				seeded++;
-				this.propagate( cell, tiles, counts );
-			})
-		});
+		for ( const [tile,position,absPos] of tiles.all() ) {
+			seeded++;
+			this.propagate( tile, tiles, counts );
+		}
 
 		this.logger.info({ preseeded:seeded });
 	}
@@ -117,30 +100,11 @@ export class Smasher {
 		const pick = candidates[ index ];
 		return pick;
 	}
-	
-	move( dimension, reversed, tile, tiles ) {
-		const diff = [0,0];
-		diff[ dimension ] = reversed ? -1 : +1;
 
-		const r = tile.position[0]+diff[0];
-		const c = tile.position[1]+diff[1];
-		const neighbor = this.get( tiles, r, c );
-
-		return neighbor;
-	}
-	
 	pickForTile( tile, tiles ) {
 		const p = tile.possibilities;
 		const pick = Array.from( p )[ Math.floor( this.random() * p.size ) ];
 		return pick;
-	}
-
-	get( tiles, r, c ) {
-		return (
-			( r < 0 || r >= tiles.length || c < 0 || c >= tiles[ 0 ].length )
-			? null
-			: tiles[ r ][ c ]
-		);
 	}
 
 	propagate( tile, tiles, counts ) {
@@ -151,14 +115,7 @@ export class Smasher {
 			count++;
 			const tile = queue.shift();
 
-
-			this.rules.everyDirection( (dimension,reversed) => {
-				const neighbor = this.move( dimension, reversed, tile, tiles );
-
-				if ( !neighbor ) {
-					return;
-				}
-
+			for ( const [neighbor,dimension,reversed,position] of tiles.neighbors( tile.position ) ) {
 				const oldCount = neighbor.count;
 				const allowed = this.rules.allowed( tile, dimension, reversed );
 
@@ -169,7 +126,7 @@ export class Smasher {
 				} else {
 					if ( oldCount !== neighbor.count ) throw new Error( `no way...` );
 				}
-			});
+			}
 		}
 
 		return count;
@@ -205,6 +162,17 @@ export class Smasher {
 	/////////////////////////////////////////////////////////////////////////////
 
 	static printTiles( tiles, cb = (t)=>t.toString() ) {
-		console.log( tiles.map( row=>row.map( cb ).join( '' ) ).join( '\n' ) );
+		const lines = [];
+
+		// FIXME: 2d for now 
+		for ( const [row,r] of tiles ) {
+			const line = [];
+			for ( const [tile,c] of row ) {
+				line.push( cb( tile ) );
+			}
+			lines.push( line.join( '' ) );
+		}
+
+		console.log( lines.join( '\n' ) );
 	}
 }

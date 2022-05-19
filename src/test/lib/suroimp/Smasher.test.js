@@ -28,11 +28,12 @@ test('ascii-topology-test',() => {
 	const iv = (i) => 3 + ( i % 2 ? -1 : +1 );
 
 	// example preseeding
-	const tiles = smasher.createTiles( r, c, count );
+	const tiles = smasher.createTiles( [r, c], count );
 	for ( let i = 0 ; i < r && i < c ; i++ ) {
-		tiles[ i ][ i ].collapse( iv( i ) );
+		tiles.get( i, i ).collapse( iv( i ) );
 	}
-	smasher.createMap( r, c, tiles ); // note the optionally preseeded the tiles 
+
+	smasher.createMap( tiles.shape, tiles ); // note the optionally preseeded the tiles 
 
 	// https://people.sc.fsu.edu/~jburkardt/data/ascii_art_grayscale/ascii_art_grayscale.html
 	const jburkardt = reverse( '$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/\\|()1{}[]?-_+~<>i!lI;:,"^`\'. ' ) // also paulbourke
@@ -53,9 +54,8 @@ test('ascii-topology-test',() => {
 		})
 	);
 
-	// verify the pre-seeded values have not changed
 	for ( let i = 0 ; i < r && i < c ; i++ ) {
-		expect( tiles[ i ][ i ].value ).toEqual( iv( i ) );
+		expect( tiles.get( i, i ).value ).toEqual( iv( i ) );
 	}
 
 	verify( tiles, smasher );
@@ -131,11 +131,10 @@ test('image-test',()=>{
 
 	const imageData = [ blank, ...corners ];
 	const rules = Ruler.fromImageData( imageData );
-console.log( 'WTF', rules.everyDirection );
 	const smasher = new Smasher( rules );
 
 	const count = size;
-	const tiles = smasher.createMap( count, count );
+	const tiles = smasher.createMap( [count, count] );
 
 	const outputCanvas = createCanvas( count * size, count * size );
 	const outputContext = outputCanvas.getContext( '2d' );
@@ -148,23 +147,23 @@ console.log( 'WTF', rules.everyDirection );
 		//console.log( edges[ 5-1 ].n, edges[ 8-1 ].s);
 	}
 
-	tiles.forEach( (row,i) => row.forEach( (cell,j) => {
-		const x = j * size;
-		const y = i * size;
-		outputContext.putImageData( imageData[ cell.value ], x, y )
+	for ( const [tile,position,absPos] of tiles.all() ) {
+
+		const x = tile.position[1] * size;
+		const y = tile.position[0] * size;
+		outputContext.putImageData( imageData[ tile.value ], x, y )
 
 		if ( !debug ) return;
 		outputContext.strokeStyle = outputContext.fillStyle = 'black';
-		outputContext.fillText( cell.value, x + 4, y + 8 );
+		outputContext.fillText( tile.value, x + 4, y + 8 );
 		outputContext.beginPath();
 		outputContext.rect( x, y, size,size);
 		outputContext.closePath();
 		outputContext.stroke();
-	}));
+	}
 	fs.writeFileSync( `${directory}/map.jpg`, outputCanvas.toBuffer('image/jpeg', { quality: 0.77 }) );
 
 });
-
 
 test( 'block-test', () => {
 	// https://en.wikipedia.org/wiki/List_of_Unicode_characters#Block_Elements
@@ -220,21 +219,21 @@ const charsetter = ( charset, rows = 40, cols = 120 ) => {
 	const rules = Ruler.fromDescription( charset );
 	const smasher = new Smasher( rules );
 
-	const tiles = smasher.createTiles( rows, cols );
+	const tiles = smasher.createTiles( [rows, cols] );
 
 	// draw a path
 
 	let m = rows - 1;
 	let r = Math.floor( rows * Math.random() );
 	for ( let c = 0 ; c < cols; c++ ) {
-		const t = tiles[ r ][ c ].collapse( 0 );
+		const t = tiles.get( r,c ).collapse( 0 );
 		if ( c && Math.random() < .5 ) {
 			if ( !false ) {
 				const change = Math.floor( rows * .33 * ( Math.random() - Math.random() ) );
 				let f = r + change;
 				if ( f < 0 || f > m ) f = r - change;
 				for ( ; r != f ; r += Math.sign( f - r ) ) {
-					tiles[ r ][ c ].collapse( 0 );
+					tiles.get( r,c ).collapse( 0 );
 				}
 			} else {
 				if ( Math.random() < .5 ) r++; else r--;
@@ -247,7 +246,7 @@ const charsetter = ( charset, rows = 40, cols = 120 ) => {
 
 	let error = null;
 	try {
-		smasher.createMap( rows, cols, tiles );
+		smasher.createMap( tiles.shape, tiles );
 	} catch ( e ) {
 		error = e;
 	}
@@ -266,32 +265,27 @@ const ascMe = ( text, color = 31 ) => {
 /////////////////////////////////////////////////////////////////////////////
 
 const verify = ( tiles, smasher ) => {
-	tiles.forEach( (row,r)=> {
-		row.forEach( (tile,c)=> {
-			expect( tile.position[0] ).toEqual( r );
-			expect( tile.position[1] ).toEqual( c );
-			expect( tile.value ).toBeGreaterThanOrEqual( 0 );
-			expect( tile.value ).toBeLessThan( smasher.count );
+	for ( const [tile,position,absPos] of tiles.all() ) {
+		const r = position[0];
+		const c = position[1];
 
-			expect( tile.count ).toEqual( 1 );
-/* FIXME: directions are changing...
-			for ( const [direction] of Object.entries( Smasher.DIRECTIONS ) ) {
-				const neighbor = smasher.move( direction, tile, tiles );
-				if ( neighbor ) {
-					expect( neighbor.value ).toBeGreaterThanOrEqual( 0 );
-					expect( neighbor.count ).toEqual( 1 );
-					expect( neighbor.value ).toBeLessThan( smasher.count );
+		expect( tile.position[0] ).toEqual( r );
+		expect( tile.position[1] ).toEqual( c );
+		expect( tile.value ).toBeGreaterThanOrEqual( 0 );
+		expect( tile.value ).toBeLessThan( smasher.count );
 
-					smasher.can( direction, tile.value, neighbor.value );
-					smasher.can( smasher.oppositeDirection( direction ), neighbor.value, tile.value );
-					// TODO: verify the row,col values are right...
-				} else {
-					// TODO: verify it'd be out of bounds...
-				}
-			}
-*/
-		});
-	});
+		for ( const [neighbor,dimension,reversed,position] of tiles.neighbors( tile.position ) ) {
+			expect( neighbor.value ).toBeGreaterThanOrEqual( 0 );
+			expect( neighbor.count ).toEqual( 1 );
+			expect( neighbor.value ).toBeLessThan( smasher.count );
+
+			// FIXME: this doesn't work like this any more...
+			//smasher.can( direction, tile.value, neighbor.value );
+			//smasher.can( smasher.oppositeDirection( direction ), neighbor.value, tile.value );
+
+			// FIXME: validate the neighbor position makes sense for the tile position and dimension/reversed
+		}
+	}
 };
 
 const reverse = ( s ) => s.split( '' ).reverse();
