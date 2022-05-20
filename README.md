@@ -1,5 +1,6 @@
 # suro-imp
 surge-routine-implosion: wave function collapse von fun-fun
+![logo](https://luckybit4755.github.io/suro-imp/dox/logo/logo-small.png)
 
 # todo
 
