@@ -1,0 +1,7 @@
+https://www.freebsd.org/gifs/daemon_hammer.jpg
+https://fineartamerica.com/featured/crashing-waves-christy-pooschke.html
+https://robertheaton.com/images/wfc-examples.png
+https://www.shroomery.org/forums/showflat.php/Number/16343144
+
+convert -resize 50% logo-big.png logo.png ; convert logo-big.png -resize 25% logo-small.png
+
