@@ -1,6 +1,5 @@
 # suro-imp
 surge-routine-implosion: wave function collapse von fun-fun
-![logo](https://luckybit4755.github.io/suro-imp/dox/logo/logo-small.png)
 
 # todo
 
@@ -23,3 +22,5 @@ surge-routine-implosion: wave function collapse von fun-fun
 - 3d tile demo: village
 - 3d tile demo: city
 - 3d tile demo: island
+
+![logo](https://luckybit4755.github.io/suro-imp/dox/logo/logo-small.png)
