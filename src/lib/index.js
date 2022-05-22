@@ -4,4 +4,4 @@ import { Tile    } from './model/Tile.js';
 import { Ruler   } from './suroimp/Ruler.js';
 import { Smasher } from './suroimp/Smasher.js';
 
-export { Multidimensional, Rules, Tile, Ruler, Smasher };
+export { Field, Rules, Tile, Ruler, Smasher };
