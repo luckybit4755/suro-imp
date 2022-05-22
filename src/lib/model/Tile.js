@@ -102,4 +102,12 @@ export class Tile {
 			Math.floor( 1 + Math.log( Math.max( 1, i ) ) /Math.log( 10 ) )
 		).fill( c )
 	}
+
+	getValue() {
+		return ( null == this.value )? -33 : this.value;
+	}
+
+	static replacer( k, v ) {
+		return ( v instanceof Tile ) ? v.getValue() : v;
+	}
 };

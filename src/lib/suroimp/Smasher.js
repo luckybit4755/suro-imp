@@ -1,19 +1,22 @@
 import { Tile } from '../model/Tile.js';
 import { Rules } from '../model/Rules.js';
-import { Multidimensional } from '../model/Multidimensional.js';
+import { Field } from '../model/Field.js';
 
 import { pino } from 'pino';
 import { sprintf } from 'sprintf-js';
 
-export class Smasher {
-	constructor( rules, limit = 1024, debug ) {
-		this.logger = pino().child({ clash:this.constructor.name });
+const DEFAULT_SMASHER_SETTINGS = {
+	logging:false,
+}
 
+export class Smasher {
+	constructor( rules, settings = {} ) {
 		this.rules = rules;
+		this.settings = { ...DEFAULT_SMASHER_SETTINGS, ...settings };
+
 		this.count = rules.count;
 
-		this.limit = limit;
-		this.debug = debug;
+		this.logger = pino({enabled:this.settings.logging}).child({ clash:this.constructor.name });
 	}
 
 	createMap( shape, tiles = null ) {
@@ -47,7 +50,7 @@ export class Smasher {
 	createTiles( shape, count = this.count ) {
 		this.logger.info({ creatingTiles:true, shape, count });
 
-		const tiles = new Multidimensional( shape, (previous,position) => {
+		const tiles = new Field( shape, (previous,position) => {
 			return new Tile( position, count );
 		});
 
@@ -137,9 +140,7 @@ export class Smasher {
 		const cells = counts.has( cell.count ) ? counts.get( cell.count ) : new Set();
 		cells.add( cell );
 		counts.set( cell.count, cells );
-		if( this.debug ) {
-			console.log( 'add', cell.count );
-		}
+		this.logger.debug({ add:cell.count });
 	}
 	
 	remove( counts, oldCount, cell ) {
@@ -177,5 +178,9 @@ export class Smasher {
 		}
 
 		console.log( lines.join( '\n' ) );
+	}
+
+	static toJson( tiles ) {
+		return JSON.stringify( tiles.array, Tile.replacer );
 	}
 }

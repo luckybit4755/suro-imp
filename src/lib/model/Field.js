@@ -6,7 +6,7 @@ const default_filler = (previous,position) => position.join( ',' );
  * - make scrolling work...
  *
  */
-class MultidimensionalIterator {
+class FieldIterator {
 	constructor( multi, arr, depth = 0 ) {
 		this.multi = multi;
 		this.arr = arr;
@@ -20,7 +20,7 @@ class MultidimensionalIterator {
 			const v = this.arr[ i ];
 			const w = ( this.leaf
 				? v 
-				: new MultidimensionalIterator( this.multi, v, this.depth + 1 )
+				: new FieldIterator( this.multi, v, this.depth + 1 )
 			);
 			yield [w,i];
 		}
@@ -33,7 +33,7 @@ class MultidimensionalIterator {
  * - make scrolling work...
  *
  */
-export class Multidimensional {
+export class Field {
 	constructor( shape, filler = default_filler, wrap = false ) {
 		this.shape = shape;
 		this.offset = shape.map( _=>0 );
@@ -126,7 +126,7 @@ export class Multidimensional {
 	}
 
 	*[Symbol.iterator] () {
-		const m = new MultidimensionalIterator( this, this.array );
+		const m = new FieldIterator( this, this.array );
 		for ( const [mi,i] of m ) {
 			yield [mi,i];
 		}
