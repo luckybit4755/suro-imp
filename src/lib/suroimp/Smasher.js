@@ -7,7 +7,8 @@ import { sprintf } from 'sprintf-js';
 
 const DEFAULT_SMASHER_SETTINGS = {
 	logging:false,
-}
+	characters:null,
+};
 
 export class Smasher {
 	constructor( rules, settings = {} ) {
@@ -26,25 +27,32 @@ export class Smasher {
 		if ( !preSeeded ) {
 			tiles = this.createTiles( shape );
 		} 
-		
+
 		const counts = this.createCounts( tiles );
 
 		if ( preSeeded ) {
 			this.preSeed( tiles, counts );
 		}
 
-		const max = shape.reduce( (a,b)=>a*b, 33 );
+		const broke = this.iterations( tiles, counts );
+		tiles.broke = broke
+	
+		this.logger.info({ createdMap:true, shape, preSeeded, broke });
+		return tiles;
+	}
+
+	iterations( tiles, counts ) {
+		const max = tiles.shape.reduce( (a,b)=>a*b, 33 );
 		let broke = false;
 		for ( let i = 0 ; i < max ; i++ ) {
 			if ( !this.iterate( tiles, counts ) ) {
 				broke = true;
 				break;
 			}
+			counts = this.createCounts( tiles ); // valerie: idk...
 		}
 		if ( !broke ) console.log( 'did not break...' );
-	
-		this.logger.info({ createdMap:true, shape, preSeeded, broke });
-		return tiles;
+		return broke;
 	}
 
 	createTiles( shape, count = this.count ) {
@@ -70,26 +78,25 @@ export class Smasher {
 	preSeed( tiles, counts ) {
 		this.logger.info({ preseeding:true });
 
-		let seeded = 0;
-
+		const seeded = [];
 		for ( const [tile,position,absPos] of tiles.all() ) {
-			seeded++;
-			this.propagate( tile, tiles, counts );
+			seeded.push( tile );
 		}
+		this.propagate( seeded, tiles, counts, true );
 
-		this.logger.info({ preseeded:seeded });
+		this.logger.info({ preseeded:seeded.length });
 	}
 
 	iterate( tiles, counts ) {
 		const pick = this.pickNext( counts );
-		if ( !pick ) return pick;
+		if (!pick || !pick.possibilities.size) return null; ///????? or pick
 
 		const pickForTile = this.pickForTile( pick, tiles );
 
 		this.remove( counts, pick.count, pick );
 		pick.collapse( pickForTile );
 
-		this.propagate( pick, tiles, counts );
+		this.propagate( [pick], tiles, counts );
 
 		return pick;
 	}
@@ -97,6 +104,8 @@ export class Smasher {
 	pickNext( counts ) {
 		if ( !counts.size ) return null; // all done!
 		const fewest = Array.from( counts.keys() ).sort( (a,b)=>b-a).pop();
+
+
 		const candidates = [...counts.get( fewest )];
 		const index = Math.floor( candidates.length * this.random() );
 		const pick = candidates[ index ];
@@ -109,8 +118,7 @@ export class Smasher {
 		return pick;
 	}
 
-	propagate( tile, tiles, counts ) {
-		const queue = [tile];
+	propagate( queue, tiles, counts, preseeding = false ) {
 		let count = 0;
 
 		while ( queue.length ) {
@@ -119,9 +127,32 @@ export class Smasher {
 
 			for ( const [neighbor,dimension,reversed,position] of tiles.neighbors( tile.position ) ) {
 				const oldCount = neighbor.count;
+				if( 1 == oldCount && preseeding ) continue;
+
 				const allowed = this.rules.allowed( tile, dimension, reversed );
 
-				if ( neighbor.restrict( allowed ) ) {
+				const b4 = this.tileToString( neighbor );
+				let restricted = null;
+
+				try {
+					restricted = neighbor.restrict( allowed );
+				} catch( e ) {
+					const ts = this.tileToString( tile );
+					const message = `${ts} imploded ${b4}: ${dimension}${reversed?'.reversed':''}`;
+					// valerie: I no longer remember what this means or if we care...
+					// this is very annnoying to look at.....
+					// console.log( message );
+					if ( neighbor.hasValue() ) {
+						neighbor.collapse( neighbor.value );
+						//	this.deleteThis()
+						//console.log( `${ts} imploded ${b4} so... ` + this.tileToString( neighbor ) );
+					}
+					continue;
+					throw new Error( message );
+				}
+
+
+				if ( restricted ) {
 					queue.push( neighbor );
 					this.remove( counts, oldCount, neighbor );
 					this.add( counts, neighbor );
@@ -134,17 +165,50 @@ export class Smasher {
 		return count;
 	}
 
-	add( counts, cell ) {
-		if ( 1 == cell.count ) return;
+	tileToString( tile ) {
+		return tile.toString( this.settings.characters );
+	}
 
-		const cells = counts.has( cell.count ) ? counts.get( cell.count ) : new Set();
-		cells.add( cell );
-		counts.set( cell.count, cells );
-		this.logger.debug({ add:cell.count });
+	scroll( tiles, offset ) {
+		const theScrolled = new Set();
+		for ( const [ tile, relative, absolute, scrolled ] of tiles.scroll( offset, true ) ) {
+			tile.position = relative;
+			if ( scrolled ) {
+				tile.reset();
+				theScrolled.add( tile );
+			}
+		}
+
+		// seed propagation from the already-collapsed border neighbors
+		const neighbors = new Set();
+		for ( const tile of theScrolled ) {
+			for ( const [neighbor] of tiles.neighbors( tile.position ) ) {
+				if ( 1 == neighbor.count ) neighbors.add( neighbor );
+			}
+		}
+
+		const counts = this.createCounts( tiles );
+		this.propagate( Array.from( neighbors ), tiles, counts, true );
+		this.iterations( tiles, counts );
+		return tiles;
+	}
+
+	add( counts, tile ) {
+		if ( 1 == tile.count ) return;
+		if ( 0 == tile.count ) {
+			throw new Error( 'invalid tile: ' + this.tileToString( tile ) );
+		}
+
+
+		const tiles = counts.has( tile.count ) ? counts.get( tile.count ) : new Set();
+		tiles.add( tile );
+		counts.set( tile.count, tiles );
+		this.logger.debug({ add:tile.count });
 	}
 	
 	remove( counts, oldCount, cell ) {
-		if ( 1 == oldCount ) return;
+		//if ( 1 == oldCount ) return;
+		if ( 1 >= oldCount ) return;
 		if ( !counts.has( oldCount ) ) {
 			throw new Error( `there are no cells which had ${oldCount}` );
 		}
@@ -158,7 +222,7 @@ export class Smasher {
 	random() {
 		return Math.random();
 	}
-	
+
 	/////////////////////////////////////////////////////////////////////////////
 
 	static printTiles( tiles, cb = (t)=>t.toString() ) {

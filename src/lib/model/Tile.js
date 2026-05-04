@@ -1,7 +1,7 @@
 /**
  *
- * A tile represents a set of possible values which can eventuall be
- * collapsed into a single actual value.
+ * A tile represents a set of possible values which can eventually
+ * collapse into a single actual value.
  *
  */
 export class Tile {
@@ -36,6 +36,9 @@ export class Tile {
 	}
 
 	collapse( value ) {
+		if ( value === undefined ) {
+			throw new Error( 'collapse called with undefined value' );
+		}
 		this.possibilities = new Set( [value] );
 		return this.updateCount();
 	}
@@ -84,10 +87,12 @@ export class Tile {
 			? mapping ? mapping[ this.value ] : this.value 
 			: '_'
 		);
+		//return `(${this.key}#${this.count}>${v})`;
+		//return `(${this.key}#${this.count}>${Array.from(this.possibilities)}<${v})`;
 		return `(${this.key}#${this.count}>${this.possibilitiesToString(mapping)}<${v})`;
 	}
 
-	possibilitiesToString( mapping = null ) {
+	possibilitiesToString(mapping = null) {
 		return new Array( this.originalCount )
 			.fill( '_' )
 			.map( ( c, i ) => {

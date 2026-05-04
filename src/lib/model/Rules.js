@@ -33,6 +33,9 @@ export class Rules {
 		const allowed = new Set();
 		for( const t of tile.possibilities ) {
 			const one = this.get( t, dimension, reversed );
+			if ( !one ) {
+				throw new Error( `no rule for ${t} going ${dimension}(${reversed?'reversed':'forward'})` );
+			}
 			for( const n of one ) {
 				allowed.add( n );
 				if ( allowed.size == this.count ) return allowed;

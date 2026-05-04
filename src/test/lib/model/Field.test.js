@@ -102,3 +102,102 @@ test('3d-test',() => {
 	}
 	expect( index ).toEqual( neighbors.length );
 });
+
+const copy = ( field ) => {
+	const a = [];
+	for ( const [row,r,i] of field ) {
+		const b = [];
+		a.push( b );
+		for ( const [cell,c,j] of row ) { 
+			b.push( `${cell}@[${r},${c}]` );
+		}
+	}
+	a.toString = () => a.map( r => r.join( '  ' ) ).join( '\n' );
+	return a;
+}
+
+test.only('scrolling-test',() => {
+	const field = new Field( [5,5] );
+
+	// bit dull this...
+	expect( field.get( 0,0 ) ).toEqual( '0,0' ); 
+
+	// now things get interesting...
+	field.scroll( [1,2] ); // rows 1-5, cols: 2-7
+	console.log( ''+ copy( field ) );
+
+	// should be out of bounds now
+	expect( field.get( 0,0 ) ).toEqual( undefined );
+	expect( field.get( 6,2 ) ).toEqual( undefined );
+	expect( field.get( 1,1 ) ).toEqual( undefined );
+	expect( field.get( 1,9 ) ).toEqual( undefined );
+	expect( field.get( 1,2 ) ).toEqual( '1,2' );
+
+	field.scroll( [99,98] ); // rows 1-5, cols: 2-7
+	expect( field.offset[ 0 ] ).toEqual( 100 );
+	expect( field.offset[ 1 ] ).toEqual( 100 );
+	console.log( ''+ copy( field ) );
+	expect( field.get( 101, 101 ) ).toEqual( '1,1' );
+
+	field.offset = [-33,-44];
+	console.log( ''+ copy( field ) );
+	expect( field.get( -99,-33 ) ).toEqual( undefined );
+	expect( field.get( -34,-45 ) ).toEqual( undefined );
+	expect( field.get( -29,-39 ) ).toEqual( undefined );
+	expect( field.get( -28,-40 ) ).toEqual( undefined );
+	expect( field.get( -33,-44 ) ).toEqual( '2,1' );
+	expect( field.get( -30,-40 ) ).toEqual( '0,0' );
+
+
+	/////////////////////////////////////////////////////////////////////////////
+
+	// reset the offset and verify things look normal
+	field.offset = [ 0, 0 ];
+
+	for ( let i = 0 ; i < 6 ; i++ ) {
+		for ( let j = 0 ; j < 6 ; j++ ) {
+			const bounds = field.inbounds( [i, j] );
+			const inBounds = ( i <5 && j <5 );
+			try { 
+				expect( bounds ).toEqual( inBounds );
+			} catch ( e ) {
+				throw new Error( `at ${i},${j}:` + e );
+			}
+
+			const gat = field.get( i, j );
+			const gett = ( i > 4 || j > 4 ) ? undefined : `${i},${j}`;
+			expect( gat ).toEqual( gett );
+		}
+	}
+
+	// now scroll and change the cells that have "moved into view"
+
+	for ( const [ cell,relative,absolute,scrolled ] of field.scroll( [1,1], true ) ) {
+		if( scrolled ) {
+			field.sat(relative,'>'+relative.join(''));
+		}
+	}
+
+	console.log( ''+ copy( field ) );
+
+	// verified the 0 row and column are no longer in view and that 
+	// the modication are as expected
+
+	for ( let i = 0 ; i < 6 ; i++ ) {
+		for ( let j = 0 ; j < 6 ; j++ ) {
+			const bounds = field.inbounds( [i, j] );
+			const inBounds = ( i > 0 && j > 0 );
+			try { 
+				expect( bounds ).toEqual( inBounds );
+			} catch ( e ) {
+				throw new Error( `at ${i},${j}:` + e );
+			}
+
+			const gat = field.get( i, j );
+			const gett = ( i < 1 || j < 1 ) ? undefined : (
+				( i > 4 || j > 4 ) ? `>${i}${j}` : `${i},${j}`
+			);
+			expect( gat ).toEqual( gett );
+		}
+	}
+});

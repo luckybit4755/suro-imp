@@ -7,22 +7,26 @@ const default_filler = (previous,position) => position.join( ',' );
  *
  */
 class FieldIterator {
-	constructor( multi, arr, depth = 0 ) {
-		this.multi = multi;
+	constructor( field, arr, depth = 0 ) {
+		this.field = field;
 		this.arr = arr;
 		this.depth = depth;
-		this.leaf = this.depth >= this.multi.shape.length - 1;
+		this.leaf = this.depth >= this.field.shape.length - 1;
 	}
 
 	*[Symbol.iterator] () {
-		// TODO: consider offset and shape... etc
+		const offset = this.field.offset[ this.depth ];
 		for ( let i = 0 ; i < this.arr.length ; i++ ) {
-			const v = this.arr[ i ];
+			const absolute = i + offset;
+			let scrolled = ( absolute ) % this.arr.length;
+			if ( scrolled < 0 ) scrolled += this.arr.length;
+
+			const v = this.arr[ scrolled ];
 			const w = ( this.leaf
 				? v 
-				: new FieldIterator( this.multi, v, this.depth + 1 )
+				: new FieldIterator( this.field, v, this.depth + 1 )
 			);
-			yield [w,i];
+			yield [w,absolute,scrolled];
 		}
 	}
 }
@@ -68,14 +72,21 @@ export class Field {
 	 *
 	 */
 	gat( position, ignoreOffset = false ) {
+
 		let current = this.array;
-		position = ignoreOffset ? position : this.relative( position );
+
 		for ( let i = 0 ; i < position.length ; i++ ) {
-			const p = position[ i ];
+			let p = position[ i ];
 
-			// TODO: for ignoreOffset check relative differently with wrap and all that
-			if ( p < 0 || p >= current.length ) return undefined;
-
+			if ( ignoreOffset ) {
+				if ( p < 0 || p >= current.length ) return undefined;
+			} else {
+				const o = this.offset[ i ];
+				if ( p < o || p >= o + this.shape[ i ] ) return undefined
+				p = p % current.length;
+				if ( p < 0 ) p += current.length;
+			}
+				
 			current = current[ p ];
 		}
 		return current;
@@ -84,24 +95,34 @@ export class Field {
 	set() {
 		const value = arguments[ arguments.length - 1 ];
 		const position = Array.from ( arguments ).slice( 0, -1 );
-		return that.sat( position, value );
+		return this.sat( position, value );
 	}
 
-	// TODO: use ignoreOffset
-	// TODO: bounds checks
 	sat( position, value, ignoreOffset = false ) {
-		const last = position.length - 1;
-
 		let current = this.array;
-		for ( let i = 0 ; i < last ; i++ ) {
-			current = current[ position[ i ] ];
+		for ( let i = 0 ; i < position.length ; i++ ) {
+			let p = position[ i ];
+			if ( ignoreOffset ) {
+				if ( p < 0 || p >= current.length ) return this;
+			} else {
+				const o = this.offset[ i ];
+				if ( p < o || p >= o + this.shape[ i ] ) return this;
+				p = p % current.length;
+				if ( p < 0 ) p += current.length;
+			}
+
+			if ( i == position.length - 1 ) {
+				current[ p ] = value;
+			} else {
+				current = current[ p ];
+			}
 		}
-		current[ last ] = value;
 
 		return this;
 	}
 
 	// TODO: implement !cardinalOnly 
+	// unlike other operations, the "neighbor" position is typically "absolute" or not..
 	neighbors( position, ignoreOffset = false, cardinalOnly = true ) {
 		const that = this;
 		return {
@@ -127,24 +148,32 @@ export class Field {
 
 	*[Symbol.iterator] () {
 		const m = new FieldIterator( this, this.array );
-		for ( const [mi,i] of m ) {
-			yield [mi,i];
+		for ( const [mi,absolute,scrolled] of m ) {
+			yield [mi,absolute,scrolled];
 		}
 	}
 
-	// visit all the nodes 
+	// visit all the nodes in viewport order
+	// for each raw array index r in dim d, the viewport position is:
+	//   visual_i = (r - offset%shape + shape) % shape   (where in the visual scan this raw slot appears)
+	//   viewport  = visual_i + offset
+	// this matches what gat() computes: gat(viewport) → array[viewport % shape] = array[r]
 	all() {
 		const that = this;
 		return {
 			*[Symbol.iterator] () {
-				const position = that.shape.map( _=> 0 );
-				while( position[ 0 ] < that.shape[ 0 ] ) {
-					yield [ that.gat( position, true ), that.relative( position ), position ];
+				const raw = that.shape.map( _=> 0 );
+				while ( raw[ 0 ] < that.shape[ 0 ] ) {
+					const position = raw.map( (r, d) => {
+						const mod = ( ( that.offset[ d ] % that.shape[ d ] ) + that.shape[ d ] ) % that.shape[ d ];
+						return ( r - mod + that.shape[ d ] ) % that.shape[ d ] + that.offset[ d ];
+					} );
+					yield [ that.gat( raw, true ), position, raw ];
 
 					for ( let i = that.shape.length - 1 ; i >= 0 ; i-- ) {
-						position[ i ]++;
-						if ( i && position[ i ] >= that.shape[ i ] ) {
-							position[ i ] = 0;
+						raw[ i ]++;
+						if ( i && raw[ i ] >= that.shape[ i ] ) {
+							raw[ i ] = 0;
 						} else {
 							break;
 						}
@@ -154,18 +183,43 @@ export class Field {
 		};
 	}
 
-	// FIXME: almost certainly not right...
 	relative( position ) {
 		return position.map( (p,i) => p + this.offset[i] );
 	}
 
-	// FIXME: almost certainly not right...
 	absolute( position ) {
 		return position.map( (p,i) => p - this.offset[i] );
 	}
 
-	scroll( offset ) {
+	inbounds( position, offset = null ) {
+		offset = offset ? offset : this.offset;
+
+		let current = this.array;
+		for ( let i = 0 ; i < position.length ; i++ ) {
+			const p = position[ i ];
+			const o = offset[ i ];
+			const s = this.shape[ i ];
+			if ( p < o || p >= o + s ) return false;
+		}
+		return true;
+	}
+
+	scroll( offset, iterator = false ) {
+		const previous = iterator ? this.offset.slice( 0 ) : null;
+
 		this.offset.forEach( (p,i) => this.offset[ i ] = p + offset[ i ] );
+
+		if ( iterator ) {
+			const that = this;
+			return {
+				*[Symbol.iterator] () {
+					for ( const [cell,relative,absolute] of that.all() ) {
+						const moveIntoView = !that.inbounds( relative, previous );// && that.inbounds( relative );
+						yield[ cell,relative,absolute,moveIntoView ];
+					}
+				}
+			}
+		}
 		return this;
 	}
 };

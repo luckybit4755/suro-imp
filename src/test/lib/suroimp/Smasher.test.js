@@ -2,7 +2,7 @@ import { Smasher } from '../../../lib/suroimp/Smasher.js';
 import { Ruler } from '../../../lib/suroimp/Ruler.js';
 import { Rules } from '../../../lib/model/Rules.js';
 
-const { createCanvas } = require('canvas')
+const { createCanvas, loadImage } = require('canvas')
 
 const fs = require( 'fs' );
 
@@ -210,6 +210,67 @@ test( 'corner-test', () => {
 */
 
 	]);
+});
+
+test('text-map-test', () => {
+	const txt = `
+	x                      ┌───┐   x
+	x        ┌─┐           └───┘   x
+	x  ┌─┐   └─┘   ┌──┐     ┌───┐  x
+	x  │ │         │  │     └───┘  x
+	x  └─┘   ┌─┐   └──┘            x
+	x        │ └─┐    ┌───┐        x
+	x        └───┘    └───┘        x
+	x                              x`
+	
+	const rules = Ruler.fromTextMap(txt) 
+	const smasher = new Smasher(rules);
+	const map = smasher.createMap([24,88])//[88, 24])
+	Smasher.printTiles(map, (t)=> t.hasValue() ? rules.tiles[t.value] : '?')          
+})
+
+test('camelot-test', () => {
+	loadImage('./etc/camelot-level1-final.png').then((image) => {
+		const canvas = createCanvas(image.width, image.height)
+		const context = canvas.getContext( '2d' );
+		context.drawImage(image, 0, 0)
+		const rules = Ruler.fromImageCanvas(canvas)
+		const imageTiles = rules.tiles
+
+		const smasher = new Smasher(rules);
+
+		const size = 16
+		const count = 13
+	
+		let tiles = null
+		for (let i = 0 ; i <100 ; i++) { 
+			try {
+				tiles = smasher.createMap([count, count])
+			} catch (e) {
+				console.log(e)
+			}
+		}
+
+		if (tiles) return
+		const outputCanvas = createCanvas(count * size, count * size);
+		const outputContext = outputCanvas.getContext( '2d' );
+
+		for ( const [tile,position,absPos] of tiles.all() ) {
+
+			const x = tile.position[1] * size;
+			const y = tile.position[0] * size;
+			outputContext.putImageData( imageTiles[ tile.value ], x, y )
+
+			if ( !debug ) return;
+			outputContext.strokeStyle = outputContext.fillStyle = 'black';
+			outputContext.fillText( tile.value, x + 4, y + 8 );
+			outputContext.beginPath();
+			outputContext.rect( x, y, size,size);
+			outputContext.closePath();
+			outputContext.stroke();
+		}
+		fs.writeFileSync( `${directory}/camelot-knock-off.jpg`, outputCanvas.toBuffer('image/jpeg', { quality: 0.77 }) );
+	})
 });
 
 
