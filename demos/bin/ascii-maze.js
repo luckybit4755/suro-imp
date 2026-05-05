@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { Smasher, Ruler } from '../../src/lib/index.js';
+import { saveImage, parseOut } from '../lib/render.js';
 
 class AsciiMaze {
 	constructor() {
@@ -17,17 +18,19 @@ class AsciiMaze {
 	}
 
 	main( args ) {
-		const rows = parseInt( args[0] ) || 12;
-		const cols = parseInt( args[1] ) || 32;
+		const { args: rest, out } = parseOut( args );
+		const rows = parseInt( rest[0] ) || 12;
+		const cols = parseInt( rest[1] ) || 32;
 
-		const rules = Ruler.fromDescription( this.charset );
+		const rules   = Ruler.fromDescription( this.charset );
 		const smasher = new Smasher( rules );
-
-		const tiles = smasher.createTiles( [rows, cols] );
+		const tiles   = smasher.createTiles( [rows, cols] );
 		this.seedBorder( tiles, rows, cols );
 		smasher.createMap( tiles.shape, tiles );
 
-		Smasher.printTiles( tiles, t => this.charset[ t.value ].c );
+		const cb = t => this.charset[ t.value ].c;
+		if ( out ) saveImage( tiles, cb, out );
+		else       Smasher.printTiles( tiles, cb );
 	}
 
 	seedBorder( tiles, rows, cols ) {

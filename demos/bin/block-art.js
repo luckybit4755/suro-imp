@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { Smasher, Ruler } from '../../src/lib/index.js';
+import { saveImage, parseOut } from '../lib/render.js';
 
 class BlockArt {
 	constructor() {
@@ -24,8 +25,9 @@ class BlockArt {
 	}
 
 	main( args ) {
-		const rows = parseInt( args[0] ) || 16;
-		const cols = parseInt( args[1] ) || 40;
+		const { args: rest, out } = parseOut( args );
+		const rows = parseInt( rest[0] ) || 16;
+		const cols = parseInt( rest[1] ) || 40;
 
 		const rules   = Ruler.fromDescription( this.charset );
 		const smasher = new Smasher( rules );
@@ -40,16 +42,15 @@ class BlockArt {
 				const change = Math.floor( rows * 0.33 * ( Math.random() - Math.random() ) );
 				let f = r + change;
 				if ( f < 0 || f > max ) f = r - change;
-				for ( ; r !== f; r += Math.sign( f - r ) ) {
-					tiles.get( r, c ).collapse( 0 );
-				}
+				for ( ; r !== f; r += Math.sign( f - r ) ) tiles.get( r, c ).collapse( 0 );
 			}
 		}
 
 		smasher.createMap( tiles.shape, tiles );
 
-		const ERR = '[31m?[0m';
-		Smasher.printTiles( tiles, t => t.hasValue() ? this.charset[ t.value ].c : ERR );
+		const cb = t => t.hasValue() ? this.charset[ t.value ].c : '?';
+		if ( out ) saveImage( tiles, cb, out );
+		else       Smasher.printTiles( tiles, cb );
 	}
 }
 
